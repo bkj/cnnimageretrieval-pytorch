@@ -30,6 +30,14 @@ In order to run this toolbox you will need:
 1. PyTorch deep learning framework (tested with version 0.3.0.post4)
 1. All the rest (data + networks) is automatically downloaded with our scripts
 
+## Quickstart w/ Anaconda
+
+```
+conda create -n ret_env python=3.6 pip -y
+source activate ret_env
+conda install pytorch==0.3.0 cuda90 torchvision -c pytorch
+```
+
 ## Usage
 
 Navigate (```cd```) to the root of the toolbox ```[YOUR_CIRTORCH_ROOT]```.
