@@ -36,6 +36,7 @@ In order to run this toolbox you will need:
 conda create -n ret_env python=3.6 pip -y
 source activate ret_env
 conda install pytorch==0.3.0 cuda90 torchvision -c pytorch
+pip install -r requirements.txt
 ```
 
 ## Usage

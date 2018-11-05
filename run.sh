@@ -2,9 +2,13 @@
 
 # run.sh
 
-python3 -m cirtorch.examples.test \
-    --gpu-id '0' \
+# source activate ret_env
+
+# DATASETS='oxford5k,paris6k,roxford5k,rparis6k'
+DATASETS='oxford5k,paris6k'
+
+CUDA_VISIBLE_DEVICES=7 python -m cirtorch.examples.test \
     --network-offtheshelf 'resnet101-gem' \
-    --datasets 'oxford5k,paris6k,roxford5k,rparis6k' \
+    --datasets $DATASETS \
     --whitening 'retrieval-SfM-120k' \
     --multiscale

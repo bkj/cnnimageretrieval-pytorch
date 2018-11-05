@@ -3,6 +3,8 @@ import os
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
+
+from tqdm import tqdm
 from torch.autograd import Variable
 
 import torchvision
@@ -56,24 +58,31 @@ OUTPUT_DIM = {
 class ImageRetrievalNet(nn.Module):
     
     def __init__(self, features, pool, whiten, meta):
-        super(ImageRetrievalNet, self).__init__()
+        super().__init__()
+        
         self.features = nn.Sequential(*features)
-        self.pool = pool
-        self.whiten = whiten
-        self.norm = L2N()
-        self.meta = meta
+        self.pool     = pool
+        self.whiten   = whiten
+        self.norm     = L2N()
+        self.meta     = meta
     
     def forward(self, x):
         # features -> pool -> norm
-        o = self.norm(self.pool(self.features(x))).squeeze(-1).squeeze(-1)
+        x = self.features(x)
+        x = self.pool(x)
+        x = self.norm(x)
+        
+        x = x.squeeze(-1).squeeze(-1)
+        
         # if whiten exist: whiten -> norm
         if self.whiten is not None:
-            o = self.norm(self.whiten(o))
+            x = self.norm(self.whiten(x))
+            
         # permute so that it is Dx1 column vector per image (DxN if many images)
-        return o.permute(1,0)
+        return x.permute(1, 0)
 
     def __repr__(self):
-        tmpstr = super(ImageRetrievalNet, self).__repr__()[:-1]
+        tmpstr = super().__repr__()[:-1]
         tmpstr += self.meta_repr()
         tmpstr = tmpstr + ')'
         return tmpstr
@@ -90,21 +99,23 @@ class ImageRetrievalNet(nn.Module):
         return tmpstr
 
 
-def init_network(model='resnet101', pooling='gem', whitening=False, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], pretrained=True):
-
-    # loading network from torchvision
-    if pretrained:
-        if model not in FEATURES:
-            # initialize with network pretrained on imagenet in pytorch
-            net_in = getattr(torchvision.models, model)(pretrained=True)
-        else:
-            # initialize with random weights, later on we will fill features with custom pretrained network
-            net_in = getattr(torchvision.models, model)(pretrained=False)
+def init_network(
+        model='resnet101',
+        pooling='gem',
+        whitening=False, 
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+        pretrained=True,
+    ):
+    
+    # --
+    # Get feature extractor
+    
+    if pretrained and (model not in FEATURES):
+        net_in = getattr(torchvision.models, model)(pretrained=True) # pretrained on imagenet
     else:
-        # initialize with random weights
-        net_in = getattr(torchvision.models, model)(pretrained=False)
-
-    # initialize features
+        net_in = getattr(torchvision.models, model)(pretrained=False) # will load weights later
+    
     # take only convolutions for features,
     # always ends with ReLU to make last activations non-negative
     if model.startswith('alexnet'):
@@ -121,13 +132,11 @@ def init_network(model='resnet101', pooling='gem', whitening=False, mean=[0.485,
     else:
         raise ValueError('Unsupported or unknown model: {}!'.format(model))
     
-    # initialize pooling
     pool = POOLING[pooling]()
-
-    # get output dimensionality size
-    dim = OUTPUT_DIM[model]
-
+    dim  = OUTPUT_DIM[model]
+    
     # initialize whitening
+    whiten = None
     if whitening:
         w = '{}-{}'.format(model, pooling)
         whiten = nn.Linear(dim, dim, bias=True)
@@ -139,49 +148,57 @@ def init_network(model='resnet101', pooling='gem', whitening=False, mean=[0.485,
         else:
             print(">> {}: for '{}' there is no whitening computed, random weights are used"
                 .format(os.path.basename(__file__), w))
-    else:
-        whiten = None
-
-    # create meta information to be stored in the network
-    meta = {'architecture':model, 'pooling':pooling, 'whitening':whitening, 'outputdim':dim, 'mean':mean, 'std':std}
-
+    
     # create a generic image retrieval network
-    net = ImageRetrievalNet(features, pool, whiten, meta)
-
+    net = ImageRetrievalNet(
+        features=features,
+        pool=pool, 
+        whiten=whiten, 
+        meta={
+            'architecture' : model,
+            'pooling'      : pooling,
+            'whitening'    : whitening,
+            'outputdim'    : dim,
+            'mean'         : mean,
+            'std'          : std,
+        }
+    )
+    
     # initialize features with custom pretrained network if needed
     if pretrained and model in FEATURES:
         print(">> {}: for '{}' custom pretrained features '{}' are used"
             .format(os.path.basename(__file__), model, os.path.basename(FEATURES[model])))
         model_dir = os.path.join(get_data_root(), 'networks')
         net.features.load_state_dict(model_zoo.load_url(FEATURES[model], model_dir=model_dir))
-
+        
     return net
 
 
 def extract_vectors(net, images, image_size, transform, bbxs=None, ms=[1], msp=1, print_freq=10):
-    # moving network to gpu and eval mode
-    net.cuda()
-    net.eval()
-
+    _ = net.cuda()
+    _ = net.eval()
+    
     # creating dataset loader
-    loader = torch.utils.data.DataLoader(
-        ImagesFromList(root='', images=images, imsize=image_size, bbxs=bbxs, transform=transform),
-        batch_size=1, shuffle=False, num_workers=8, pin_memory=True
+    dataset    = ImagesFromList(root='', images=images, imsize=image_size, bbxs=bbxs, transform=transform)
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=1, # Why?
+        shuffle=False,
+        num_workers=8,
+        pin_memory=True,
     )
-
+    
     # extracting vectors
     vecs = torch.zeros(net.meta['outputdim'], len(images))
-    for i, input in enumerate(loader):
-        input_var = Variable(input.cuda())
-
+    for i, img in tqdm(enumerate(dataloader), total=len(dataloader)):
+        img = Variable(img.cuda())
+        
+        # extract_ms(net, img, ms, msp)
         if len(ms) == 1:
-            vecs[:, i] = extract_ss(net, input_var)
+            vecs[:, i] = extract_ss(net, img)
         else:
-            vecs[:, i] = extract_ms(net, input_var, ms, msp)
-
-        if (i+1) % print_freq == 0 or (i+1) == len(images):
-            print('\r>>>> {}/{} done...'.format((i+1), len(images)), end='')
-    print('')
+            vecs[:, i] = extract_ms(net, img, ms, msp)
+    
     return vecs
 
 
@@ -199,10 +216,11 @@ def extract_ms(net, input_var, ms, msp):
         else:    
             size = (int(input_var.size(-2) * s), int(input_var.size(-1) * s))
             input_var_t = nn.functional.upsample(input_var, size=size, mode='bilinear')
-        v += net(input_var_t).pow(msp).cpu().data.squeeze()
         
+        v += net(input_var_t).pow(msp).cpu().data.squeeze()
+    
     v /= len(ms)
     v = v.pow(1./msp)
     v /= v.norm()
-
+    
     return v

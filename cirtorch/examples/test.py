@@ -97,9 +97,10 @@ if __name__ == "__main__":
         print(net.meta_repr())
     
     elif args.network_offtheshelf is not None:
+        
         offtheshelf = args.network_offtheshelf.split('-')
         if len(offtheshelf) == 3:
-            if offtheshelf[2]=='whiten':
+            if offtheshelf[2] == 'whiten':
                 offtheshelf_whiten = True
             else:
                 raise(RuntimeError("Incorrect format of the off-the-shelf network. Examples: resnet101-gem | resnet101-gem-whiten"))
@@ -159,10 +160,11 @@ if __name__ == "__main__":
             db = pickle.load(open(db_fn, 'rb'))
             images = [cid2filename(db['cids'][i], ims_root) for i in range(len(db['cids']))]
             
-            print('>> {}: Extracting...'.format(args.whitening))
+            print('\t>> {}: Extracting...'.format(args.whitening))
             wvecs = extract_vectors(net, images, args.image_size, transform, ms=ms, msp=msp).numpy()
+            np.save('./results/vecs_whiten.npy', wvecs)
             
-            print('>> {}: Learning...'.format(args.whitening))
+            print('\t>> {}: Learning...'.format(args.whitening))
             m, P = whitenlearn(wvecs, db['qidxs'], db['pidxs'])
             Lw = {'m': m, 'P': P}
             
