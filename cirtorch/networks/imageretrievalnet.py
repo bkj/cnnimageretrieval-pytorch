@@ -193,7 +193,6 @@ def extract_vectors(net, images, image_size, transform, bbxs=None, ms=[1], msp=1
     for i, img in tqdm(enumerate(dataloader), total=len(dataloader)):
         img = Variable(img.cuda())
         
-        # extract_ms(net, img, ms, msp)
         if len(ms) == 1:
             vecs[:, i] = extract_ss(net, img)
         else:
@@ -202,22 +201,22 @@ def extract_vectors(net, images, image_size, transform, bbxs=None, ms=[1], msp=1
     return vecs
 
 
-def extract_ss(net, input_var):
-    return net(input_var).cpu().data.squeeze()
+def extract_ss(net, img):
+    return net(img).cpu().data.squeeze()
 
 
-def extract_ms(net, input_var, ms, msp):
+def extract_ms(net, img, ms, msp):
     
     v = torch.zeros(net.meta['outputdim'])
     
     for s in ms: 
         if s == 1:
-            input_var_t = input_var.clone()
-        else:    
-            size = (int(input_var.size(-2) * s), int(input_var.size(-1) * s))
-            input_var_t = nn.functional.upsample(input_var, size=size, mode='bilinear')
+            img_t = img.clone()
+        else:
+            size = (int(img.size(-2) * s), int(img.size(-1) * s))
+            img_t = nn.functional.upsample(img, size=size, mode='bilinear')
         
-        v += net(input_var_t).pow(msp).cpu().data.squeeze()
+        v += net(img_t).pow(msp).cpu().data.squeeze()
     
     v /= len(ms)
     v = v.pow(1./msp)

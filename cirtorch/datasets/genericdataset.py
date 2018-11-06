@@ -24,42 +24,38 @@ class ImagesFromList(data.Dataset):
     """
 
     def __init__(self, root, images, imsize=None, bbxs=None, transform=None, loader=default_loader):
-
+        
         images_fn = [os.path.join(root,images[i]) for i in range(len(images))]
-
+        
         if len(images_fn) == 0:
             raise(RuntimeError("Dataset contains 0 images!"))
-
-        self.root = root
-        self.images = images
-        self.imsize = imsize
+            
+        self.root      = root
+        self.images    = images
+        self.imsize    = imsize
         self.images_fn = images_fn
-        self.bbxs = bbxs
+        self.bbxs      = bbxs
         self.transform = transform
-        self.loader = loader
+        self.loader    = loader
 
     def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            image (PIL): Loaded image
-        """
         path = self.images_fn[index]
         img = self.loader(path)
+        
         if self.bbxs:
             img = img.crop(self.bbxs[index])
+        
         if self.imsize is not None:
             img = imresize(img, self.imsize)
+        
         if self.transform is not None:
             img = self.transform(img)
-
+        
         return img
-
+        
     def __len__(self):
         return len(self.images_fn)
-
+        
     def __repr__(self):
         fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
         fmt_str += '    Number of images: {}\n'.format(self.__len__())
