@@ -25,6 +25,7 @@ from cirtorch.utils.download import download_train, download_test
 from cirtorch.utils.whiten import whitenlearn, whitenapply
 from cirtorch.utils.evaluate import compute_map_and_print
 from cirtorch.utils.general import get_data_root, htime
+from cirtorch.utils.diffusion import run_diffusion
 
 PRETRAINED = {
     'retrievalSfM120k-vgg16-gem'     : 'http://cmp.felk.cvut.cz/cnnimageretrieval/data/networks/retrieval-SfM-120k/retrievalSfM120k-vgg16-gem-b4dcdc6.pth',
@@ -240,6 +241,9 @@ if __name__ == "__main__":
             scores       = np.dot(vecs_lw.T, qexp_vecs)
             ranks        = np.argsort(-scores, axis=0)
             compute_map_and_print(dataset + ' + whiten + expansion', ranks, cfg['gnd'])
+            
+            ranks = run_diffusion(vecs_lw, qvecs_lw)
+            compute_map_and_print(dataset + ' + whiten + diffusion', ranks, cfg['gnd'])
         
         print('>> {}: elapsed time: {}'.format(dataset, htime(time() - start)))
         print('--')

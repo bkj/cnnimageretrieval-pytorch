@@ -1,3 +1,5 @@
 tqdm
 pandas==0.23.4
 scikit-leran==0.20.0
+fbpca==1.0
+scipy==1.1.0

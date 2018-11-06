@@ -64,7 +64,6 @@ CUDA_VISIBLE_DEVICES=7 python -m cirtorch.examples.test \
     --whitening 'retrieval-SfM-120k' \
     --multiscale
 
-# >> retrieval-SfM-120k: elapsed time: 7s
 # >> loading oxford5k features
 # >> oxford5k                     : mAP 52.15
 # >> oxford5k + whiten            : mAP 66.65
@@ -87,7 +86,6 @@ CUDA_VISIBLE_DEVICES=7 python -m cirtorch.examples.test \
     --whitening 'retrieval-SfM-120k' \
     --multiscale
 
-# >> retrieval-SfM-120k: elapsed time: 36s
 # >> loading oxford5k features
 # >> oxford5k                     : mAP 56.15
 # >> oxford5k + whiten            : mAP 78.68
