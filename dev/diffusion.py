@@ -52,7 +52,7 @@ net.meta['Lw'] = state['meta']['Lw']
 Lw = net.meta['Lw'][whitening]
 Lw = Lw['ms']
 
-dataset    = 'paris6k'
+dataset    = 'oxford5k'
 multiscale = True
 
 cfg = configdataset(dataset, os.path.join(get_data_root(), 'test'))
@@ -105,8 +105,8 @@ from scipy import sparse
 import fbpca
 
 n_neighbors  = 50
-qn_neighbors = 50
-dim          = 512
+qn_neighbors = 10
+dim          = 1024
 alpha        = 0.99
 gamma        = 1
 
@@ -140,8 +140,8 @@ S = D.dot(W).dot(D)
 S = (S + S.T) / 2          # Fix numerical precision issues
 
 eigval, eigvec = fbpca.eigens(S, k=dim, n_iter=20)
-h_eigval       = np.diag(1 / (1 - alpha * eigval))
-Q              = eigvec.dot(h_eigval).dot(eigvec.T)
+h_eigval = 1 / (1 - alpha * eigval)
+Q        = eigvec.dot(np.diag(h_eigval)).dot(eigvec.T)
 
 # Make query
 ysim    = vecs_lw.T.dot(qvecs_lw)
