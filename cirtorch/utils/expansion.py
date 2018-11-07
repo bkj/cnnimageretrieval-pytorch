@@ -1,6 +1,7 @@
 import sys
 import fbpca
 import numpy as np
+from scipy import sparse
 from cirtorch.utils.evaluate import compute_map_and_print
 
 try:
@@ -10,7 +11,16 @@ except:
     print('could not import faiss')
     FAISS_ENABLED = False
 
-def run_query_simple(vecs, qvecs):
+
+def agg_regions(scores, num_queries, num_images, num_regions):
+    scores = scores.T
+    scores = scores.reshape(num_queries * num_regions, num_images, num_regions).max(axis=2)
+    scores = scores.reshape(num_queries, num_regions, num_images).sum(axis=1)
+    scores = scores.T
+    return scores
+
+
+def run_query_simple(vecs, qvecs, num_regions=1):
     scores = np.dot(vecs.T, qvecs)
     
     if num_regions > 1:
@@ -21,7 +31,7 @@ def run_query_simple(vecs, qvecs):
             num_regions = num_regions,
         )
     
-    ranks  = np.argsort(-scores, axis=0)
+    ranks = np.argsort(-scores, axis=0)
     return ranks
 
 
@@ -40,14 +50,12 @@ def _numpy_make_graph(vecs, n_neighbors, gamma, symmetric=True):
     
     return sim
 
+
 def _faiss_make_graph(vecs, n_neighbors, gamma, symmetric=True):
     print('_faiss_make_graph', file=sys.stderr)
-    
-    """
-        Should be substantially faster than numpy version above
-        Still brute-force, but multithreaded
-    """
     assert symmetric == True
+    
+    num_vecs = vecs.shape[1]
     
     tmp = vecs.T.astype(np.float32)
     tmp = np.ascontiguousarray(tmp)
@@ -57,35 +65,52 @@ def _faiss_make_graph(vecs, n_neighbors, gamma, symmetric=True):
     
     D, I = findex.search(tmp, n_neighbors + 1)
     D, I = D[:,1:], I[:,1:]
+    print('done search')
     
-    rows = np.repeat(np.arange(tmp.shape[0]), n_neighbors)
+    rows = np.repeat(np.arange(num_vecs), n_neighbors)
     cols = np.hstack(I)
     vals = np.hstack(D)
     
-    sim = np.zeros((tmp.shape[0], tmp.shape[0]))
-    sim[(rows, cols)] = vals
+    sim = sparse.csr_matrix((vals, (rows, cols)), shape=(num_vecs, num_vecs))
     if symmetric:
-        sim = np.minimum(sim, sim.T)
+        sim = sim.minimum(sim.T)
     
     return sim
 
 
-def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024, alpha=0.99, gamma=1):
+def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024, 
+    alpha=0.99, gamma=1, num_regions=1):
     
+    print('sim')
     if FAISS_ENABLED:
         W = _faiss_make_graph(vecs, n_neighbors, gamma, symmetric=True)
+        
+        d = np.asarray(W.sum(axis=1)).squeeze()
+        d[d == 0] = 1e-6
+        d = d ** -0.5
+        
+        D = sparse.eye(vecs.shape[1]).tocsr()
+        D.data *= d
+        S = D.dot(W).dot(D)
+        S = (S + S.T) / 2
     else:
         W = _numpy_make_graph(vecs, n_neighbors, gamma, symmetric=True)
+        
+        d = W.sum(axis=1)
+        d[d == 0] = 1e-6
+        d = d ** -0.5
+        
+        D = np.diag(d)
+        S = D.dot(W).dot(D)
+        S = (S + S.T) / 2
     
-    D = W.sum(axis=1)
-    D[D == 0] = 1e-6
-    D = np.diag(D ** -0.5)
-    S = D.dot(W).dot(D)
+    print('done sim')
     
     print('eigens')
-    S = (S + S.T) / 2 # Ensure symmetric (fix numerical precision issues)
     eigval, eigvec = fbpca.eigens(S, k=dim, n_iter=20)
     h_eigval = 1 / (1 - alpha * eigval)
+    
+    print('Q')
     Q        = eigvec.dot(np.diag(h_eigval)).dot(eigvec.T)
     
     # Make query
