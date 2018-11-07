@@ -1,16 +1,16 @@
+import sys
 import fbpca
 import numpy as np
 from cirtorch.utils.evaluate import compute_map_and_print
 
-def agg_regions(scores, num_queries, num_images, num_regions):
-    scores = scores.T
-    scores = scores.reshape(num_queries * num_regions, num_images, num_regions).max(axis=2)
-    scores = scores.reshape(num_queries, num_regions, num_images).sum(axis=1)
-    scores = scores.T
-    return scores
+try:
+    import faiss
+    FAISS_ENABLED = True
+except:
+    print('could not import faiss')
+    FAISS_ENABLED = False
 
-
-def run_query_simple(vecs, qvecs, num_regions=1):
+def run_query_simple(vecs, qvecs):
     scores = np.dot(vecs.T, qvecs)
     
     if num_regions > 1:
@@ -25,52 +25,58 @@ def run_query_simple(vecs, qvecs, num_regions=1):
     return ranks
 
 
-# def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024, alpha=0.99, gamma=1):
-#     # Make DB matrix
-#     sim = vecs.T.dot(vecs)
-#     sim = sim.clip(min=0)
-#     np.fill_diagonal(sim, 0)
-#     sim = sim ** gamma
+def _numpy_make_graph(vecs, n_neighbors, gamma, symmetric=True):
+    print('_numpy_make_graph', file=sys.stderr)
     
-#     thresh = np.sort(sim, axis=0)[-n_neighbors].reshape(1, -1)
-#     sim[sim < thresh] = 0
-    
-#     W = np.minimum(sim, sim.T)
-#     D = W.sum(axis=1)
-#     D[D == 0] = 1e-6
-#     D = np.diag(D ** -0.5)
-#     S = D.dot(W).dot(D)
-    
-#     S = (S + S.T) / 2 # Fix numerical precision issues
-#     eigval, eigvec = fbpca.eigens(S, k=dim, n_iter=20)
-#     h_eigval = 1 / (1 - alpha * eigval)
-#     Q        = eigvec.dot(np.diag(h_eigval)).dot(eigvec.T)
-    
-#     # Make query
-#     ysim    = vecs.T.dot(qvecs)
-#     ythresh = np.sort(ysim, axis=0)[-qn_neighbors].reshape(1, -1)
-#     ysim[ysim < ythresh] = 0
-#     ysim = ysim ** gamma
-    
-#     # Run search
-#     scores = Q.dot(ysim)
-#     ranks  = np.argsort(-scores, axis=0)
-    
-#     return ranks
-
-def run_query_diffusion(vecs, qvecs, n_neighbors=200, qn_neighbors=200, dim=1024, alpha=0.99, gamma=1, num_regions=1):
-    # Make DB matrix
-    print('sim')
     sim = vecs.T.dot(vecs)
     sim = sim.clip(min=0)
     np.fill_diagonal(sim, 0)
-    sim = sim ** gamma
-    
     thresh = np.sort(sim, axis=0)[-n_neighbors].reshape(1, -1)
     sim[sim < thresh] = 0
     
-    print('W')
-    W = np.minimum(sim, sim.T)
+    sim = sim ** gamma
+    if symmetric:
+        sim = np.minimum(sim, sim.T)
+    
+    return sim
+
+def _faiss_make_graph(vecs, n_neighbors, gamma, symmetric=True):
+    print('_faiss_make_graph', file=sys.stderr)
+    
+    """
+        Should be substantially faster than numpy version above
+        Still brute-force, but multithreaded
+    """
+    assert symmetric == True
+    
+    tmp = vecs.T.astype(np.float32)
+    tmp = np.ascontiguousarray(tmp)
+    
+    findex = faiss.IndexFlatIP(tmp.shape[1])
+    findex.add(tmp)
+    
+    D, I = findex.search(tmp, n_neighbors + 1)
+    D, I = D[:,1:], I[:,1:]
+    
+    rows = np.repeat(np.arange(tmp.shape[0]), n_neighbors)
+    cols = np.hstack(I)
+    vals = np.hstack(D)
+    
+    sim = np.zeros((tmp.shape[0], tmp.shape[0]))
+    sim[(rows, cols)] = vals
+    if symmetric:
+        sim = np.minimum(sim, sim.T)
+    
+    return sim
+
+
+def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024, alpha=0.99, gamma=1):
+    
+    if FAISS_ENABLED:
+        W = _faiss_make_graph(vecs, n_neighbors, gamma, symmetric=True)
+    else:
+        W = _numpy_make_graph(vecs, n_neighbors, gamma, symmetric=True)
+    
     D = W.sum(axis=1)
     D[D == 0] = 1e-6
     D = np.diag(D ** -0.5)
