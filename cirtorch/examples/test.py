@@ -204,8 +204,13 @@ if __name__ == "__main__":
             db = pickle.load(open(db_fn, 'rb'))
             images = [cid2filename(db['cids'][i], ims_root) for i in range(len(db['cids']))]
             
-            whitening_path = f'./results/whitening/{net_name}__{args.whitening}__ms{args.multiscale}.npy'
+            # <<
+            # whitening_path = f'./results/whitening/{net_name}__{args.whitening}__ms{args.multiscale}.npy'
+            print('ignoring ms in whitening')
+            whitening_path = f'./results/whitening/{net_name}__{args.whitening}__msTrue.npy'
+            # >>
             if os.path.exists(whitening_path):
+                print('\tuse cache', file=sys.stderr)
                 wvecs = np.load(whitening_path)
             else:
                 wvecs = extract_vectors(net, images, args.image_size, transform, ms=ms, msp=msp).numpy()
@@ -224,23 +229,24 @@ if __name__ == "__main__":
         else:
             cfg = load_landmark(dataset, 'data/test')
         
-        vecs_path  = f'./results/vecs/{dataset}__{net_name}__ms{args.multiscale}.npy'
-        qvecs_path = f'./results/qvecs/{dataset}__{net_name}__ms{args.multiscale}.npy'
+        vecs_path  = f'./results/vecs/{dataset}__{net_name}__ms{args.multiscale}_regional.npy'
+        qvecs_path = f'./results/qvecs/{dataset}__{net_name}__ms{args.multiscale}_regional.npy'
         if os.path.exists(vecs_path):
             vecs  = np.load(vecs_path)
             qvecs = np.load(qvecs_path)
         else:
-            print('compute features', file=sys.stderr)
-            vecs  = extract_vectors(net, cfg['images'], args.image_size, transform, ms=ms, msp=msp).numpy()
-            np.save(vecs_path, vecs)
-            
             qvecs = extract_vectors(net, cfg['qimages'], args.image_size, transform, bbxs=cfg['bbxs'], ms=ms, msp=msp).numpy()
             np.save(qvecs_path, qvecs)
+            
+            vecs  = extract_vectors(net, cfg['images'], args.image_size, transform, ms=ms, msp=msp).numpy()
+            np.save(vecs_path, vecs)
         
-        print('running queries')
+        print('running %s' % dataset, file=sys.stderr)
         
         # Performance w/o whitening
-        simple_ranks = run_query_simple(vecs, qvecs)
+        num_regions = 15
+        assert vecs.shape[1] == num_regions * len(cfg['images'])
+        simple_ranks = run_query_simple(vecs, qvecs, num_regions=num_regions)
         compute_map_and_print(dataset + '                     ', simple_ranks, cfg['gnd'])
         
         # Performance w/ whitening
@@ -248,7 +254,7 @@ if __name__ == "__main__":
             vecs_lw  = whitenapply(vecs, Lw['m'], Lw['P'])
             qvecs_lw = whitenapply(qvecs, Lw['m'], Lw['P'])
             
-            whitened_ranks  = run_query_simple(vecs_lw, qvecs_lw)
+            whitened_ranks  = run_query_simple(vecs_lw, qvecs_lw, num_regions=num_regions)
             compute_map_and_print(dataset + ' + whiten            ', whitened_ranks, cfg['gnd'])
             
             if args.alpha_qe:

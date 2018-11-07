@@ -80,7 +80,8 @@ class ImageRetrievalNet(nn.Module):
             x = self.norm(self.whiten(x))
             
         # permute so that it is Dx1 column vector per image (DxN if many images)
-        return x.permute(1, 0)
+        x = x.permute(1, 0)
+        return x
 
     def __repr__(self):
         tmpstr = super().__repr__()[:-1]
@@ -189,15 +190,25 @@ def extract_vectors(net, images, image_size, transform, bbxs=None, ms=[1], msp=1
         pin_memory=True,
     )
     
-    vecs = torch.zeros(net.meta['outputdim'], len(images))
+    num_regions = 15
+    wrong_size = 0
+    
+    vecs = torch.zeros(net.meta['outputdim'], num_regions * len(images))
     for i, img in tqdm(enumerate(dataloader), total=len(dataloader)):
         img = Variable(img.cuda())
         
         if len(ms) == 1:
-            vecs[:, i] = extract_ss(net, img)
+            tmp = extract_ss(net, img)
+            if tmp.shape[1] != num_regions:
+                wrong_size += 1
+            
+            _num_regions = min(num_regions, tmp.shape[1])
+            vecs[:, (num_regions * i):(num_regions * i + _num_regions)] = tmp[:,:_num_regions]
         else:
-            vecs[:, i] = extract_ms(net, img, ms, msp)
+            raise NotImplemented
+            # vecs[:, i] = extract_ms(net, img, ms, msp)
     
+    print('wrong_size=%d' % wrong_size, file=sys.stderr)
     return vecs
 
 

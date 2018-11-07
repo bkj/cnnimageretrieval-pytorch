@@ -186,6 +186,13 @@ CUDA_VISIBLE_DEVICES=7 python -m cirtorch.examples.test \
     --diffusion \
     --multiscale
 
+# >> instre                     : mAP 49.72
+# >> instre + whiten            : mAP 67.83
+# >> instre + whiten + expansion: mAP 72.64
+# >> instre + whiten + diffusion: mAP 80.08
+
+# !! Kindof strange, since this network is finetuned for out-of-domain data
+
 # --
 # Notes:
 # - All of these use supervised whitening, trained on a labeled
