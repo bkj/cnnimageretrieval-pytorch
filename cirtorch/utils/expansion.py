@@ -1,23 +1,73 @@
+import sys
 import fbpca
 import numpy as np
 from cirtorch.utils.evaluate import compute_map_and_print
+
+try:
+    import faiss
+    FAISS_ENABLED = True
+except:
+    print('could not import faiss')
+    FAISS_ENABLED = False
 
 def run_query_simple(vecs, qvecs):
     scores = np.dot(vecs.T, qvecs)
     ranks  = np.argsort(-scores, axis=0)
     return ranks
 
-def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024, alpha=0.99, gamma=1):
-    # Make DB matrix
+
+def _numpy_make_graph(vecs, n_neighbors, gamma, symmetric=True):
+    print('_numpy_make_graph', file=sys.stderr)
+    
     sim = vecs.T.dot(vecs)
     sim = sim.clip(min=0)
     np.fill_diagonal(sim, 0)
-    sim = sim ** gamma
-    
     thresh = np.sort(sim, axis=0)[-n_neighbors].reshape(1, -1)
     sim[sim < thresh] = 0
     
-    W = np.minimum(sim, sim.T)
+    sim = sim ** gamma
+    if symmetric:
+        sim = np.minimum(sim, sim.T)
+    
+    return sim
+
+def _faiss_make_graph(vecs, n_neighbors, gamma, symmetric=True):
+    print('_faiss_make_graph', file=sys.stderr)
+    
+    """
+        Should be substantially faster than numpy version above
+        Still brute-force, but multithreaded
+    """
+    assert symmetric == True
+    
+    tmp = vecs.T.astype(np.float32)
+    tmp = np.ascontiguousarray(tmp)
+    
+    findex = faiss.IndexFlatIP(tmp.shape[1])
+    findex.add(tmp)
+    
+    D, I = findex.search(tmp, n_neighbors + 1)
+    D, I = D[:,1:], I[:,1:]
+    
+    rows = np.repeat(np.arange(tmp.shape[0]), n_neighbors)
+    cols = np.hstack(I)
+    vals = np.hstack(D)
+    
+    sim = np.zeros((tmp.shape[0], tmp.shape[0]))
+    sim[(rows, cols)] = vals
+    if symmetric:
+        sim = np.minimum(sim, sim.T)
+    
+    return sim
+
+
+def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024, alpha=0.99, gamma=1):
+    
+    if FAISS_ENABLED:
+        W = _faiss_make_graph(vecs, n_neighbors, gamma, symmetric=True)
+    else:
+        W = _numpy_make_graph(vecs, n_neighbors, gamma, symmetric=True)
+    
     D = W.sum(axis=1)
     D[D == 0] = 1e-6
     D = np.diag(D ** -0.5)
