@@ -15,7 +15,7 @@ def configdataset(dataset, dir_main):
     with open(gnd_fname, 'rb') as f:
         cfg = pickle.load(f)
     
-    cfg['gnd_fname']   = gnd_fname
+    cfg['gnd_fname']  = gnd_fname
     cfg['ext']        = '.jpg'
     cfg['qext']       = '.jpg'
     cfg['dir_data']   = os.path.join(dir_main, dataset)

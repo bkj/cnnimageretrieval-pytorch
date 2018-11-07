@@ -14,7 +14,7 @@ def compute_ap(ranks, nres):
     -------
     ap    : average precision
     """
-
+    
     # number of images ranked by the system
     nimgranks = len(ranks)
     
@@ -34,7 +34,7 @@ def compute_ap(ranks, nres):
         precision_1 = float(j + 1) / (rank + 1)
         
         ap += (precision_0 + precision_1) * recall_step / 2.
-        
+    
     return ap
 
 def compute_map(ranks, gnd, kappas=[]):
@@ -56,9 +56,9 @@ def compute_map(ranks, gnd, kappas=[]):
     """
     
     map = 0.
-    nq = len(gnd) # number of queries
+    nq  = len(gnd) # number of queries
     aps = np.zeros(nq)
-    pr = np.zeros(len(kappas))
+    pr  = np.zeros(len(kappas))
     prs = np.zeros((nq, len(kappas)))
     nempty = 0
     
@@ -67,16 +67,16 @@ def compute_map(ranks, gnd, kappas=[]):
         
         # no positive images, skip from the average
         if qgnd.shape[0] == 0:
-            aps[i] = float('nan')
+            aps[i]    = float('nan')
             prs[i, :] = float('nan')
             nempty += 1
             continue
-            
+        
         try:
             qgndj = np.array(gnd[i]['junk'])
         except:
             qgndj = np.empty(0)
-            
+        
         # sorted positions of positive and junk images (0 based)
         pos  = np.arange(ranks.shape[0])[np.in1d(ranks[:,i], qgnd)]
         junk = np.arange(ranks.shape[0])[np.in1d(ranks[:,i], qgndj)]
@@ -91,14 +91,14 @@ def compute_map(ranks, gnd, kappas=[]):
                 while (ij < len(junk) and pos[ip] > junk[ij]):
                     k += 1
                     ij += 1
+                
                 pos[ip] = pos[ip] - k
                 ip += 1
-                
+        
         # compute ap
         ap = compute_ap(pos, len(qgnd))
         map = map + ap
         aps[i] = ap
-        
         # compute precision @ k
         pos += 1 # get it to 1-based
         for j in np.arange(len(kappas)):
@@ -107,7 +107,7 @@ def compute_map(ranks, gnd, kappas=[]):
         pr = pr + prs[i, :]
         
     map = map / (nq - nempty)
-    pr = pr / (nq - nempty)
+    pr  = pr / (nq - nempty)
     
     return map, aps, pr, prs
 
@@ -115,10 +115,9 @@ def compute_map(ranks, gnd, kappas=[]):
 def compute_map_and_print(dataset, ranks, gnd, kappas=[1, 5, 10]):
     
     # old evaluation protocol
-    if dataset.startswith('oxford5k') or dataset.startswith('paris6k'):
+    if dataset.startswith('oxford5k') or dataset.startswith('paris6k') or dataset.startswith('instre'):
         map, aps, _, _ = compute_map(ranks, gnd)
         print(colored('>> {}: mAP {:.2f}'.format(dataset, np.around(map*100, decimals=2)), 'yellow'))
-        
     # new evaluation protocol
     elif dataset.startswith('roxford5k') or dataset.startswith('rparis6k'):
         
@@ -146,5 +145,7 @@ def compute_map_and_print(dataset, ranks, gnd, kappas=[1, 5, 10]):
             gnd_t.append(g)
         mapH, apsH, mprH, prsH = compute_map(ranks, gnd_t, kappas)
         
-        print('>> {}: mAP E: {}, M: {}, H: {}'.format(dataset, np.around(mapE*100, decimals=2), np.around(mapM*100, decimals=2), np.around(mapH*100, decimals=2)))
-        print('>> {}: mP@k{} E: {}, M: {}, H: {}'.format(dataset, kappas, np.around(mprE*100, decimals=2), np.around(mprM*100, decimals=2), np.around(mprH*100, decimals=2)))
+        print(colored('>> {}: mAP E: {}, M: {}, H: {}'.format(dataset, np.around(mapE*100, decimals=2), np.around(mapM*100, decimals=2), np.around(mapH*100, decimals=2)), 'green'))
+        # print(colored('>> {}: mP@k{} E: {}, M: {}, H: {}'.format(dataset, kappas, np.around(mprE*100, decimals=2), np.around(mprM*100, decimals=2), np.around(mprH*100, decimals=2)), 'green'))
+    else:
+        raise Exception

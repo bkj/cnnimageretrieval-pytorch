@@ -1,4 +1,5 @@
 import os
+import sys
 
 import torch
 import torch.nn as nn
@@ -188,7 +189,6 @@ def extract_vectors(net, images, image_size, transform, bbxs=None, ms=[1], msp=1
         pin_memory=True,
     )
     
-    # extracting vectors
     vecs = torch.zeros(net.meta['outputdim'], len(images))
     for i, img in tqdm(enumerate(dataloader), total=len(dataloader)):
         img = Variable(img.cuda())
