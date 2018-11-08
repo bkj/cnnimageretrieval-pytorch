@@ -153,7 +153,7 @@ if __name__ == "__main__":
                 raise(RuntimeError("Incorrect format of the off-the-shelf network. Examples: resnet101-gem | resnet101-gem-whiten"))
         else:
             offtheshelf_whiten = False
-        
+            
         net = init_network(
             model     = offtheshelf[0],
             pooling   = offtheshelf[1],
@@ -171,7 +171,7 @@ if __name__ == "__main__":
         ms = [1, 1./math.sqrt(2), 1./2]
         if net.meta['pooling'] == 'gem' and net.whiten is None:
             msp = net.pool.p.data.tolist()[0]
-    
+            
     net.cuda()
     net.eval()
     
@@ -215,7 +215,7 @@ if __name__ == "__main__":
             else:
                 wvecs = extract_vectors(net, images, args.image_size, transform, ms=ms, msp=msp).numpy()
                 np.save(whitening_path, wvecs)
-            
+                
             t = time()
             m, P = whitenlearn(wvecs, db['qidxs'], db['pidxs'])
             Lw = {'m': m, 'P': P}
@@ -262,7 +262,7 @@ if __name__ == "__main__":
                 compute_map_and_print(dataset + ' + whiten + expansion', alpha_qe_ranks, cfg['gnd'])
             
             if args.diffusion:
-                diffusion_ranks = run_query_diffusion(vecs_lw, qvecs_lw)
+                diffusion_ranks = run_query_diffusion(vecs_lw, qvecs_lw, num_regions=num_regions)
                 compute_map_and_print(dataset + ' + whiten + diffusion', diffusion_ranks, cfg['gnd'])
         
         print('--')
