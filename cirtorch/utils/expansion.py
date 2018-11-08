@@ -36,30 +36,35 @@ def run_query_simple(vecs, qvecs, num_regions=1):
 
 
 def _numpy_make_graph(vecs, n_neighbors, gamma):
+    # returns dense matrix
+    
+    # KNN search w/ numpy product
     sim = vecs.T.dot(vecs)
     sim = sim.clip(min=0)
     np.fill_diagonal(sim, 0)
-    thresh = np.sort(sim, axis=0)[-n_neighbors].reshape(1, -1)
+    thresh = np.sort(sim, axis=0)[-n_neighbors].reshape(1, -1) # could use np.partition
     sim[sim < thresh] = 0
-    
     sim = sim ** gamma
     
     # make mutual knn graph
-    sim = np.minimum(sim, sim.T)
+    adj = np.minimum(sim, sim.T)
     
     # symmetric normalization
-    d = W.sum(axis=1)
-    d[d == 0] = 1e-6
-    d = d ** -0.5
+    degrees = adj.sum(axis=1)
+    degrees[degrees == 0] = 1e-6
+    degrees = degrees ** -0.5
+    D_sqinv = np.diag(d)
     
-    D = np.diag(d)
-    S = D.dot(W).dot(D)
-    S = (S + S.T) / 2
+    adj_norm = D_sqinv.dot(adj).dot(D_sqinv)
+    adj_norm = (adj_norm + adj_norm.T) / 2
     
-    return sim
+    return adj_norm
 
 
 def _faiss_make_graph(vecs, n_neighbors, gamma):
+    # returns sparse matrix
+    
+    # KNN search w/ faiss
     num_vecs = vecs.shape[1]
     
     tmp = vecs.T.astype(np.float32)
@@ -73,23 +78,23 @@ def _faiss_make_graph(vecs, n_neighbors, gamma):
     
     rows = np.repeat(np.arange(num_vecs), n_neighbors)
     cols = np.hstack(I)
-    vals = np.hstack(D)
+    vals = np.hstack(D) ** gamma
     sim  = sparse.csr_matrix((vals, (rows, cols)), shape=(num_vecs, num_vecs))
     
     # make mutual knn graph
-    sim = sim.minimum(sim.T)
+    adj = sim.minimum(sim.T)
     
     # Symmetric normalization
-    d = np.asarray(W.sum(axis=1)).squeeze()
-    d[d == 0] = 1e-6
-    d = d ** -0.5
+    degrees = np.asarray(adj.sum(axis=1)).squeeze()
+    degrees[degrees == 0] = 1e-6
+    degrees = degrees ** -0.5
+    D_sqinv = sparse.eye(vecs.shape[1]).tocsr()
+    D_sqinv.data *= degrees
     
-    D = sparse.eye(vecs.shape[1]).tocsr()
-    D.data *= d
-    S = D.dot(W).dot(D)
-    S = (S + S.T) / 2
+    adj_norm = D_sqinv.dot(adj).dot(D_sqinv)
+    adj_norm = (adj_norm + adj_norm.T) / 2
     
-    return S
+    return adj_norm
 
 
 def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024, 
@@ -109,12 +114,12 @@ def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024,
     h_eigval = 1 / (1 - alpha * eigval)
     
     print('precompute U_bar')
-    U_bar = eigvec.dot(np.diag(h_eigval)) # Very big dense matrix.  In paper, they make this sparse.
+    U_bar = eigvec.dot(np.diag(h_eigval)) # In paper, they additionally make this sparse.
     
     # Make query
     print('L2 search queries')
     ysim    = vecs.T.dot(qvecs)
-    ythresh = np.sort(ysim, axis=0)[-qn_neighbors].reshape(1, -1)
+    ythresh = np.sort(ysim, axis=0)[-qn_neighbors].reshape(1, -1) # could use np.partition
     ysim[ysim < ythresh] = 0
     ysim = ysim ** gamma
     
@@ -134,6 +139,7 @@ def run_query_diffusion(vecs, qvecs, n_neighbors=50, qn_neighbors=10, dim=1024,
     
     ranks = np.argsort(-scores, axis=0)
     return ranks
+
 
 def run_query_alpha_qe(vecs, qvecs, n=50, alpha=3):
     

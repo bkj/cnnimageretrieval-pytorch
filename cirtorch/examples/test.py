@@ -258,8 +258,9 @@ if __name__ == "__main__":
             compute_map_and_print(dataset + ' + whiten            ', whitened_ranks, cfg['gnd'])
             
             if args.alpha_qe:
-                alpha_qe_ranks = run_query_alpha_qe(vecs_lw, qvecs_lw)
-                compute_map_and_print(dataset + ' + whiten + expansion', alpha_qe_ranks, cfg['gnd'])
+                raise NotImplemented
+                # alpha_qe_ranks = run_query_alpha_qe(vecs_lw, qvecs_lw)
+                # compute_map_and_print(dataset + ' + whiten + expansion', alpha_qe_ranks, cfg['gnd'])
             
             if args.diffusion:
                 diffusion_ranks = run_query_diffusion(vecs_lw, qvecs_lw, num_regions=num_regions)
